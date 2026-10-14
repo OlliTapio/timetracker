@@ -1,4 +1,6 @@
-__pycache__/
+node_modules/
+coverage/
 *.db
+*.db-journal
 config.toml
-.venv/
+.eslintcache

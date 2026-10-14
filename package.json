@@ -1,0 +1,47 @@
+{
+  "name": "timetracker",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Local-LLM time tracker for Windows: samples window titles, writes 15-minute entries",
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=24.2"
+  },
+  "packageManager": "pnpm@12.6.0",
+  "scripts": {
+    "tt": "node src/cli.ts",
+    "typecheck": "tsc -p .",
+    "lint": "eslint --max-warnings=0 --cache .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "knip": "knip",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest",
+    "check:fast": "tsc -p . && eslint --max-warnings=0 --cache . && vitest run",
+    "check": "prettier --check . && tsc -p . && eslint --max-warnings=0 --cache . && vitest run --coverage && knip",
+    "prepare": "lefthook install"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "koffi": "3.3.2",
+    "smol-toml": "1.9.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@eslint-community/eslint-plugin-eslint-comments": "4.8.1",
+    "@eslint/js": "10.0.1",
+    "@types/estree": "1.0.9",
+    "@types/node": "24.13.3",
+    "@vitest/coverage-v8": "5.0.3",
+    "eslint": "10.12.0",
+    "eslint-plugin-functional": "10.0.1",
+    "jiti": "2.7.0",
+    "knip": "6.40.0",
+    "lefthook": "2.1.17",
+    "prettier": "3.9.9",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.1",
+    "vitest": "5.0.3"
+  }
+}
