@@ -1,0 +1,11 @@
+# Copy to config.toml and edit.
+projects = ["Sono", "Job search", "Personal", "Gaming"]
+db_path = "timetracker.db"
+sample_seconds = 5
+idle_after_seconds = 120
+block_minutes = 15
+# The model runs on the RTX 2080 PC; set OLLAMA_HOST=0.0.0.0 there so the main PC can reach it.
+ollama_url = "http://old-pc:11434"
+model = "qwen2.5:7b-instruct"
+# Regexes stripped from window titles before they are stored.
+redact = ['\S+@\S+']
