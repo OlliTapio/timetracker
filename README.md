@@ -16,7 +16,7 @@ review / label / accept / eval
 
 1. Old PC: install [Ollama](https://ollama.com), `ollama pull qwen2.5:7b-instruct`, set
    `OLLAMA_HOST=0.0.0.0`, open port 11434 on the private network only.
-2. Main PC: Python 3.11+, no other dependencies. `copy config.example.toml config.toml` and edit
+2. Main PC: Python 3.11+; the tracker itself has no dependencies. `copy config.example.toml config.toml` and edit
    the projects and `ollama_url`.
 3. Run two terminals:
    ```
@@ -34,6 +34,20 @@ python -m timetracker eval                # accuracy against your labels
 ```
 
 Corrections are fed back to the model as examples, and they are the eval set.
+
+## Agent access (MCP)
+
+`pip install "mcp>=2,<3"`, then register the server with your agent, e.g. Claude Code:
+
+```
+claude mcp add timetracker -e TIMETRACKER_CONFIG=C:\path\to\config.toml -- python -m timetracker.mcp_server
+```
+
+Tools: `list_projects`, `list_entries`, `block_evidence`, `relabel` (a time range in one call),
+`hours_by_project`, `export_timesheet` (CSV per project), `accuracy`. So the review can be a
+conversation ("Tuesday 13–15 was the Nebius application, not Sono"), and delivery too ("export
+last week's Sono hours"). Agent corrections are labels like any other: they feed the eval and
+the model's examples.
 
 ## Multi-monitor attention
 
