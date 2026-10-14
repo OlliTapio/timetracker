@@ -46,7 +46,7 @@ const summarizeBlock = async (ctx: Context, chat: Chat, start: number): Promise<
 export const summarizePending = async (ctx: Context, chat: Chat, now: number): Promise<number> => {
   const { config, store } = ctx
   const current = blockStart(now, config.blockMinutes)
-  const pending = store.unsummarizedBlocks(config.blockMinutes * 60, current)
+  const pending = store.unsummarizedBlocks(config.blockMinutes, current)
   const written = await inOrder(pending, (start) => summarizeBlock(ctx, chat, start))
   return written.length
 }

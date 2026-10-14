@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { blockStart, evidence } from '../../src/domain/blocks.ts'
+import { blockStart, blockStarts, evidence } from '../../src/domain/blocks.ts'
 import { checkProject, DEFAULT_CONFIG } from '../../src/domain/config.ts'
 import { redact } from '../../src/domain/redact.ts'
 import { accuracy, timesheet, totals } from '../../src/domain/report.ts'
@@ -41,6 +41,18 @@ describe('evidence', () => {
 
 test('blockStart aligns down to the block', () => {
   expect(blockStart(1_760_000_400 + 899.5, 15)).toBe(1_760_000_400)
+})
+
+test('blockStarts lists each block of sorted times once, in order', () => {
+  const t = 1_760_000_400
+  expect(blockStarts([t, t + 0.5, t + 899.999, t + 900, t + 3599.5, t + 3600], 15)).toEqual([
+    t,
+    t + 900,
+    t + 2700,
+    t + 3600,
+  ])
+  expect(blockStarts([t - 0.001, t, t + 60.25], 1)).toEqual([t - 60, t, t + 60])
+  expect(blockStarts([], 15)).toEqual([])
 })
 
 test('checkProject accepts Idle and names the choices otherwise', () => {

@@ -22,7 +22,9 @@ export const today = (): string => localParts(nowSeconds()).day
 /** Unix seconds of a local day and time; throws for a date that does not exist. */
 export const localTs = (day: string, time: string): number => {
   const ms = new Date(`${day}T${time}`).getTime()
-  if (Number.isNaN(ms)) throw new Error(`"${day} ${time}" is not a valid local date and time.`)
+  // Date rolls 02-30 over into March; only the day is compared, so DST-gap times still resolve.
+  if (Number.isNaN(ms) || localParts(ms / 1000).day !== day)
+    throw new Error(`"${day} ${time}" is not a valid local date and time.`)
   return ms / 1000
 }
 

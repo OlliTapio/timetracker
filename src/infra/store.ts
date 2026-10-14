@@ -8,6 +8,7 @@ import {
   samplesFrom,
   type StoredEntry,
 } from '../adapters/rows.ts'
+import { blockStarts } from '../domain/blocks.ts'
 import type { Correction, Entry, Labelled, Prediction, Sample, Snapshot } from '../domain/types.ts'
 import { unwrap } from './unwrap.ts'
 
@@ -29,12 +30,11 @@ CREATE TABLE IF NOT EXISTS labels (
 );
 `
 
-/** Same alignment as domain blockStart; blocks are summarized in order, so only newer ones can be missing. */
-const UNSUMMARIZED = `
-SELECT DISTINCT CAST(ts AS INTEGER) - CAST(ts AS INTEGER) % :size AS block_start FROM samples
+/** Blocks are summarized in order, so only samples from the newest entry's block on can be pending. */
+const PENDING_TIMES = `
+SELECT DISTINCT ts FROM samples
 WHERE ts >= COALESCE((SELECT MAX(block_start) FROM entries), 0) AND ts < :before
-  AND CAST(ts AS INTEGER) - CAST(ts AS INTEGER) % :size NOT IN (SELECT block_start FROM entries)
-ORDER BY block_start`
+ORDER BY ts`
 
 const ENTRIES = `
 SELECT e.block_start, e.project, e.activity, e.confidence,
@@ -49,7 +49,8 @@ WHERE e.project != l.project ORDER BY l.block_start DESC LIMIT :limit`
 export interface Store {
   /** Writes return how many rows they changed. */
   readonly insertSample: (ts: number, s: Snapshot) => number
-  readonly unsummarizedBlocks: (blockSeconds: number, before: number) => readonly number[]
+  /** Finished-block starts with samples and no entry yet, oldest first. */
+  readonly unsummarizedBlocks: (blockMinutes: number, before: number) => readonly number[]
   readonly samplesBetween: (from: number, to: number) => readonly Sample[]
   readonly insertEntry: (entry: Entry) => number
   readonly recentCorrections: (limit: number) => readonly Correction[]
@@ -75,8 +76,20 @@ WHERE block_start >= :from AND block_start < :to`
 const PREDICTIONS = `SELECT e.project AS predicted, l.project AS actual
 FROM entries e JOIN labels l USING (block_start)`
 
+/** Aligned here, not in SQL, so blocks follow the one domain rule. */
+const unsummarized = (db: DatabaseSync, minutes: number, before: number): readonly number[] => {
+  const times = unwrap(numbersFrom(db.prepare(PENDING_TIMES).all({ before }), 'ts'))
+  const summarized = db.prepare('SELECT 1 FROM entries WHERE block_start = ?')
+  return blockStarts(times, minutes).filter((start) => summarized.get(start) === undefined)
+}
+
+/** Another process (run, mcp, review) may be writing: wait for it instead of failing. */
+const BUSY_TIMEOUT_MS = 5000
+
 export const openStore = (path: string): Store => {
-  const db = new DatabaseSync(path)
+  const db = new DatabaseSync(path, { timeout: BUSY_TIMEOUT_MS })
+  // WAL lets readers work while `run` writes; an in-memory database ignores it.
+  db.exec('PRAGMA journal_mode=WAL')
   db.exec(SCHEMA)
   const run = (sql: string, params: Params): number => Number(db.prepare(sql).run(params).changes)
   const all = (sql: string, params: Params = {}): readonly unknown[] => db.prepare(sql).all(params)
@@ -90,8 +103,7 @@ export const openStore = (path: string): Store => {
         ct: s.cursorTitle,
         idle: s.idleS,
       }),
-    unsummarizedBlocks: (size, before) =>
-      unwrap(numbersFrom(all(UNSUMMARIZED, { size, before }), 'block_start')),
+    unsummarizedBlocks: (minutes, before) => unsummarized(db, minutes, before),
     samplesBetween: (from, to) =>
       unwrap(
         samplesFrom(

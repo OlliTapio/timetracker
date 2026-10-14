@@ -24,7 +24,9 @@ sampler (Win32, every 5 s) ──redact──▶ samples
 
 `run` does sampling and summarizing in one process, on two timers. Blocks are summarized
 oldest first; a failure (Ollama down) stops at that block and the next minute retries it, so
-the database never has a gap that later blocks skipped over.
+the database never has a gap that later blocks skipped over. Because of that, only samples from
+the newest entry's block on are looked at: a sample written into an older block afterwards (a
+clock set back, say) is kept but never summarized.
 
 ## Layers
 
@@ -66,7 +68,9 @@ That is what lets the whole pipeline run in tests with an in-memory database and
 SQLite via `node:sqlite` (built into Node, nothing to compile). Three tables: `samples`,
 `entries` (one per block, the model's guess and the evidence text it saw) and `labels` (a
 person's correction per block). A label always wins over the entry in reports. Times are unix
-seconds; blocks are aligned to multiples of the block length.
+seconds; blocks are aligned to multiples of the block length, by domain `blockStart` only (the
+SQL never aligns). The database runs in WAL mode with a 5 s busy timeout, because `run` writes
+every few seconds while `mcp`, `review` and `label` use it from other processes.
 
 ## Rules, and what enforces them
 

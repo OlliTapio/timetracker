@@ -5,6 +5,7 @@
 import { basename } from 'node:path'
 import koffi from 'koffi'
 import type { Snapshot } from '../domain/types.ts'
+import { Cell } from './cell.ts'
 
 export type Sampler = () => Snapshot
 
@@ -36,6 +37,17 @@ const bind = () => {
 
 type Win32 = ReturnType<typeof bind>
 
+/** koffi registers struct names globally, so a second bind would throw "Duplicate type name". */
+const bound = new Cell<Win32 | null>(null)
+
+const win32 = (): Win32 => {
+  const existing = bound.get()
+  if (existing !== null) return existing
+  const fresh = bind()
+  bound.swap(fresh)
+  return fresh
+}
+
 const titleOf = (w: Win32, hwnd: unknown): string => {
   const length = Number(w.titleLength(hwnd))
   const buf = Buffer.alloc((length + 1) * 2)
@@ -60,7 +72,9 @@ const processOf = (w: Win32, hwnd: unknown): string => {
 
 const idleSeconds = (w: Win32): number => {
   const info = { cbSize: 8, dwTime: 0 }
-  w.lastInput(info)
+  // Without this, dwTime 0 would make every block look idle since boot.
+  if (w.lastInput(info) !== true)
+    throw new Error('GetLastInputInfo failed, so idle time is unknown. Check the koffi binding.')
   return ((Number(w.ticks()) - info.dwTime) >>> 0) / 1000
 }
 
@@ -71,7 +85,7 @@ const describe = (w: Win32, hwnd: unknown): readonly [string, string] =>
 export const windowsSampler = (): Sampler => {
   if (process.platform !== 'win32')
     throw new Error('Sampling needs Windows (it reads Win32 windows).')
-  const w = bind()
+  const w = win32()
   return () => {
     const point = { x: 0, y: 0 }
     w.cursorPos(point)

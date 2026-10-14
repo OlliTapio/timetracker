@@ -4,6 +4,12 @@ import type { Guess, Sample } from './types.ts'
 
 export const blockStart = (ts: number, minutes: number): number => ts - (ts % (minutes * 60))
 
+/** The blocks that times sorted oldest first fall in, each once, oldest first. */
+export const blockStarts = (sortedTimes: readonly number[], minutes: number): readonly number[] =>
+  sortedTimes
+    .map((ts) => blockStart(ts, minutes))
+    .filter((start, i, starts) => i === 0 || starts[i - 1] !== start)
+
 export interface WindowTime {
   readonly process: string
   readonly title: string

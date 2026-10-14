@@ -48,6 +48,9 @@ describe('configFrom', () => {
     [{ porjects: ['A'] }, /Unknown setting "porjects"/],
     [{ projects: 'A' }, /"projects" must be a list of strings/],
     [{ sample_seconds: 0 }, /"sample_seconds" must be a positive number/],
+    [{ block_minutes: 7.5 }, /"block_minutes" must be a positive whole number/],
+    [{ block_minutes: 0 }, /"block_minutes" must be a positive whole number/],
+    [{ block_minutes: '15' }, /"block_minutes" must be a positive whole number/],
     [{ model: 7 }, /"model" must be a string/],
     [[], /TOML table/],
   ])('rejects %j', (raw, message) => {

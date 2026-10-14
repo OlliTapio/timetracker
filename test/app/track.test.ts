@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest'
 import { recordSample, summarizePending } from '../../src/app/track.ts'
+import { blockStart } from '../../src/domain/blocks.ts'
 import type { ChatMessage } from '../../src/domain/types.ts'
 import type { Chat } from '../../src/infra/ollama.ts'
 import { context, snapshot, T0 } from '../support/context.ts'
@@ -42,12 +43,33 @@ test('an idle block skips the model', async () => {
 test('a failed block is retried on the next run, and later blocks wait for it', async () => {
   const ctx = context()
   recordSample(ctx, T0, snapshot('booking.py'), [])
-  recordSample(ctx, T0 + 900, snapshot('booking.py'), [])
-  const down: Chat = async () => {
-    throw new Error('Ollama is down')
+  recordSample(ctx, T0 + 900, snapshot('Nebius'), [])
+  const failsFirstBlock: Chat = async (messages) => {
+    if (messages.at(-1)?.content.includes('booking') === true) throw new Error('Ollama is down')
+    return fakeModel([])(messages)
   }
-  await expect(summarizePending(ctx, down, T0 + 1800)).rejects.toThrow('Ollama is down')
+  await expect(summarizePending(ctx, failsFirstBlock, T0 + 1800)).rejects.toThrow('Ollama is down')
+  expect(ctx.store.entriesBetween(0, Infinity)).toEqual([])
   expect(await summarizePending(ctx, fakeModel([]), T0 + 1800)).toBe(2)
+})
+
+test('a sample older than the newest entry is not summarized', async () => {
+  const ctx = context()
+  recordSample(ctx, T0 + 900, snapshot('booking.py'), [])
+  expect(await summarizePending(ctx, fakeModel([]), T0 + 1800)).toBe(1)
+  recordSample(ctx, T0, snapshot('booking.py'), [])
+  expect(await summarizePending(ctx, fakeModel([]), T0 + 1800)).toBe(0)
+})
+
+test('blocks of any whole length match the domain alignment, fractional times included', async () => {
+  const ctx = context({ blockMinutes: 60 })
+  const times = [T0 - 0.001, T0, T0 + 0.25, T0 + 3599.999, T0 + 3600]
+  times.forEach((ts) => recordSample(ctx, ts, snapshot('booking.py'), []))
+  const starts = [...new Set(times.map((ts) => blockStart(ts, 60)))]
+  expect(ctx.store.unsummarizedBlocks(60, T0 + 7200)).toEqual(starts)
+  expect(ctx.store.unsummarizedBlocks(1, T0 + 7200)).toEqual([
+    ...new Set(times.map((ts) => blockStart(ts, 1))),
+  ])
 })
 
 test('corrections are shown to the model as examples', async () => {

@@ -1,8 +1,10 @@
+import { once } from 'node:events'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Worker } from 'node:worker_threads'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { DEFAULT_CONFIG } from '../../src/domain/config.ts'
 import { compilePatterns, loadConfig } from '../../src/infra/config-file.ts'
@@ -41,20 +43,44 @@ describe('config file', () => {
   })
 })
 
+const SNAP = { fgProcess: 'a', fgTitle: 'b', cursorProcess: '', cursorTitle: '', idleS: 0 }
+
 test('the database keeps samples across a reopen', () => {
   const path = join(mkdtempSync(join(tmpdir(), 'tt-')), 't.db')
   const first = openStore(path)
-  first.insertSample(1, {
-    fgProcess: 'a',
-    fgTitle: 'b',
-    cursorProcess: '',
-    cursorTitle: '',
-    idleS: 0,
-  })
+  first.insertSample(1, SNAP)
   first.close()
   const second = openStore(path)
   expect(second.samplesBetween(0, 2)).toHaveLength(1)
   second.close()
+})
+
+/** Takes the write lock, waits until the main thread is about to write, then holds it 200 ms. */
+const HOLD_LOCK = `
+const { workerData, parentPort } = require('node:worker_threads')
+const { DatabaseSync } = require('node:sqlite')
+const db = new DatabaseSync(workerData.path)
+db.exec('BEGIN IMMEDIATE')
+parentPort.postMessage('locked')
+Atomics.wait(workerData.go, 0, 0)
+Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200)
+db.exec('COMMIT')
+db.close()
+`
+
+test('a write waits for another process holding the lock instead of failing', async () => {
+  const path = join(mkdtempSync(join(tmpdir(), 'tt-')), 't.db')
+  openStore(path).close()
+  const go = new Int32Array(new SharedArrayBuffer(4))
+  const holder = new Worker(HOLD_LOCK, { eval: true, workerData: { path, go } })
+  const exited = once(holder, 'exit')
+  await once(holder, 'message')
+  const store = openStore(path)
+  Atomics.store(go, 0, 1)
+  Atomics.notify(go, 0)
+  expect(store.insertSample(1, SNAP)).toBe(1)
+  store.close()
+  await exited
 })
 
 test('parseJson returns a Result', () => {
@@ -75,8 +101,8 @@ describe('local time', () => {
     expect(localParts(to)).toEqual({ day: '2026-10-16', time: '00:00' })
   })
 
-  test('rejects a date that does not exist', () => {
-    expect(() => localTs('2026-13-01', '09:00')).toThrow(/not a valid local date/)
+  test.each(['2026-13-01', '2026-02-30', '2026-04-31'])('rejects %s, which does not exist', (d) => {
+    expect(() => localTs(d, '09:00')).toThrow(/not a valid local date/)
   })
 })
 
@@ -133,8 +159,10 @@ test('every waits after each run, survives failures, and stops', async () => {
 })
 
 test.runIf(process.platform === 'win32')('the Windows sampler reads a snapshot', () => {
+  windowsSampler()
   const snap = windowsSampler()()
-  expect(typeof snap.fgProcess).toBe('string')
+  if (snap.fgTitle !== '') expect(snap.fgProcess).toMatch(/\.exe$/i)
+  expect(Number.isFinite(snap.idleS)).toBe(true)
   expect(snap.idleS).toBeGreaterThanOrEqual(0)
 })
 
