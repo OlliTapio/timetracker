@@ -1,0 +1,2 @@
+# Prettier and the hooks expect LF on every platform.
+* text=auto eol=lf

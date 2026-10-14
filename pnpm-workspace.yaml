@@ -1,0 +1,7 @@
+# Only install versions published at least a week ago (minutes), so a hijacked release has time to be caught.
+minimumReleaseAge: 10080
+# esbuild (for vitest) and lefthook download platform binaries; koffi's script only checks its bundled one loads.
+allowBuilds:
+  esbuild: true
+  koffi: true
+  lefthook: true
